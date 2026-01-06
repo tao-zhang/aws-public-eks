@@ -169,6 +169,8 @@ resource "aws_eks_cluster" "main" {
     }
   }
 
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policy
   ]
