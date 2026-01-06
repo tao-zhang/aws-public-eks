@@ -51,10 +51,9 @@ resource "aws_route_table" "public" {
 resource "aws_subnet" "public" {
   count = length(local.azs)
 
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = cidrsubnet(local.vpc_cidr, 8, count.index)
-  availability_zone       = local.azs[count.index]
-  map_public_ip_on_launch = true
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet(local.vpc_cidr, 8, count.index)
+  availability_zone = local.azs[count.index]
 
   tags = {
     Name                     = "${local.name}-public-${local.azs[count.index]}"
@@ -126,6 +125,25 @@ resource "aws_iam_role_policy_attachment" "node_policy_registry" {
 }
 
 ################################################################################
+# KMS Key for EKS Encryption
+################################################################################
+
+resource "aws_kms_key" "eks" {
+  description             = "KMS key for EKS cluster secrets encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = {
+    Name = "${local.name}-kms"
+  }
+}
+
+resource "aws_kms_alias" "eks" {
+  name          = "alias/${local.name}"
+  target_key_id = aws_kms_key.eks.key_id
+}
+
+################################################################################
 # EKS Cluster
 ################################################################################
 
@@ -142,6 +160,13 @@ resource "aws_eks_cluster" "main" {
   access_config {
     authentication_mode                         = "API"
     bootstrap_cluster_creator_admin_permissions = true
+  }
+
+  encryption_config {
+    resources = ["secrets"]
+    provider {
+      key_arn = aws_kms_key.eks.arn
+    }
   }
 
   depends_on = [
@@ -190,6 +215,10 @@ resource "aws_launch_template" "eks_nodes" {
     --BOUNDARY--
   EOT
   )
+
+  metadata_options {
+    http_tokens = "required"
+  }
 }
 
 ################################################################################
